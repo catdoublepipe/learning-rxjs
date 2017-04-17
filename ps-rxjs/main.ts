@@ -1,4 +1,5 @@
 import { Observable } from 'rxjs';
+import { load, loadWithFetch } from './loader';
 
 // *****************
 // Chapter 1 - Array
@@ -64,48 +65,6 @@ let output = document.getElementById('output');
 
 let clickSource = Observable.fromEvent(button, 'click');
 
-function load(url: string) {
-  return Observable.create(observer => {
-    let xhr = new XMLHttpRequest();
-
-    xhr.addEventListener('load', () => {
-
-      if (xhr.status === 200) {
-        let data = JSON.parse(xhr.responseText);
-        observer.next(data);
-        observer.complete();
-
-        // for this demo, assume http status other than 200 is an error
-      } else {
-        observer.error(xhr.statusText);
-      }
-
-    });
-
-    xhr.open('GET', url);
-    xhr.send();
-
-  })//.retry(3); // retry 3 more times if error.
-    .retryWhen(retryStrategy({
-      attempts: 3,
-      delay: 1500
-    }));
-};
-
-// Takes an error Observable and returns an error Observable
-function retryStrategy({ attempts = 4, delay = 1000 }) {
-  return function (errors) {
-
-    return errors
-      .scan((acc, value) => {
-        console.log(acc, value);
-        return acc + 1;
-      }, 0) // accumulator - count the errors starting at 0
-      .takeWhile(acc => acc < attempts) // mirror items emitted by an Observable until a specified condition becomes false
-      .delay(delay);
-  }
-}
-
 function renderMovies(movies) {
   movies.forEach(m => {
     let div = document.createElement("div");
@@ -136,19 +95,59 @@ clickSource.flatMap(click => load('movies.json')).subscribe(
 let fetchButton = document.getElementById('fetch-button');
 let fetchClickSource = Observable.fromEvent(button, 'click');
 
-
-// loadWithFetch without defer is not as lazy as load - code executes even though nothing subscribes yet.
-function loadWithFetch(url: string) {
-  return Observable.defer(() => { // like a factory, defer only create the Observable.fromPromise when we have a subscribed observer
-
-    return Observable.fromPromise(
-      fetch(url).then(res => res.json()) // use Promise API to deserialise the response.
-    );
-  });
-}
-
 fetchClickSource.flatMap(click => loadWithFetch('movies.json')).subscribe(
   renderMovies,
   err => console.error(`error: ${err}`),
   () => console.log('complete')
 );
+
+// **************************
+// Chapter 5 - Error handling
+// **************************
+
+let lowLevelErrorSource = Observable.create(obs => {
+  obs.next(1);
+  obs.next(2);
+  obs.error('stop');
+  // throw new Error('stop!') // this will not get caught by the observer's error callback so is different to obs.error
+  obs.next(3);
+  obs.complete();
+});
+
+lowLevelErrorSource.subscribe(
+  value => console.log(`value: ${value}`),
+  err => console.log(`error: ${err}`),
+  () => console.log('complete')
+);
+
+let higherLevelErrorSource = Observable.merge( // using .onErrorResumeNext will continue as if error never occurred.
+  Observable.of(1),
+  Observable.from([2, 3, 4]),
+  Observable.throw(new Error('stop!')), // handled error - different from just throwing new Error.
+  Observable.of(5) // this is never reached unless we use .onErrorResumeNext or .catch
+
+).catch(err => {
+  console.log(`caught error: ${err}`);
+  return Observable.of(10);
+});
+
+higherLevelErrorSource.subscribe(
+  value => console.log(`value: ${value}`),
+  err => console.log(`error: ${err}`),
+  () => console.log('complete')
+);
+
+loadWithFetch('movies.json').subscribe(
+  renderMovies,
+  e => console.log(`error: ${e}`),
+  () => console.log('complete')
+);
+
+// ***********************
+// Chapter 6 - Unsubscribe
+// ***********************
+
+let subscriptionToLoad = load('movies.json').subscribe();
+
+console.log(subscriptionToLoad);
+subscriptionToLoad.unsubscribe();
