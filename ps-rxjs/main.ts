@@ -147,7 +147,11 @@ loadWithFetch('movies.json').subscribe(
 // Chapter 6 - Unsubscribe
 // ***********************
 
-let subscriptionToLoad = load('movies.json').subscribe();
+let subscriptionToLoad = load('movies.json').subscribe(
+  renderMovies,
+  err => console.error(`error: ${err}`),
+  () => console.log('complete')
+);
 
 console.log(subscriptionToLoad);
 subscriptionToLoad.unsubscribe();
